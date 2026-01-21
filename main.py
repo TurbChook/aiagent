@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 from google import genai
 from dotenv import load_dotenv
@@ -24,7 +25,19 @@ def main():
     if args.verbose:
         print(f"User prompt: {args.user_prompt}\n")
     # Now we can access `args.user_prompt`
-    generate_content(client,messages,args.verbose)
+    for _ in range(20):
+        response = generate_content(client,messages,args.verbose)
+        if isinstance(response,str):
+            print("Fi   nal response:")
+            print(response)
+            return
+        else:
+            if response.candidates:
+                for item in response.candidates:
+                    messages.append(item.content)
+    print("Maximum iterations reached without a final response")
+    sys.exit(1)
+
 def generate_content(client, messages,verbose):
     response =  client.models.generate_content(
         model='gemini-2.5-flash', contents= messages, config = types.GenerateContentConfig(tools = [available_functions], system_instruction = system_prompt),)
@@ -34,9 +47,7 @@ def generate_content(client, messages,verbose):
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
     if not response.function_calls:
-        print("Response:")
-        print(response.text)
-        return
+        return response.text
     function_responses = []
     for function_call in response.function_calls:
         function_call_result = call_function(function_call,verbose)
@@ -50,5 +61,7 @@ def generate_content(client, messages,verbose):
         if verbose:
             print(f"-> {first_part.function_response.response['result']}")
         function_responses.append(first_part)
+    messages.append(types.Content(role="user", parts=function_responses))
+    return response
 if __name__ == "__main__":
     main()
